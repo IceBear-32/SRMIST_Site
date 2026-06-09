@@ -27,16 +27,16 @@
             </div>
             <div class="pathway-legend">
               <div class="legend-item">
+                <span class="legend-dot active-dot">■</span>
+                <span>Selected / Hovered</span>
+              </div>
+              <div class="legend-item">
                 <span class="legend-dot pre">■</span>
                 <span>Prerequisite</span>
               </div>
               <div class="legend-item">
                 <span class="legend-dot dep">■</span>
                 <span>Dependent</span>
-              </div>
-              <div class="legend-item">
-                <span class="legend-dot locked">■</span>
-                <span>Selected</span>
               </div>
             </div>
           </div>
@@ -59,16 +59,18 @@
                       'course-card',
                       getCourseType(course) === 'J' ? 'type-j' : getCourseType(course) === 'L' ? 'type-l' : 'type-t',
                       {
-                        'locked': isLocked(course),
-                        'faded': activeCourse && !isLocked(course) && (!isInPath(course) || course.nonGraded),
+                        'locked':          isLocked(course),
+                        'highlighted-active': isActive(course),
+                        'faded':           activeCourse && !isInPath(course) && !course.nonGraded,
+                        'faded-ng':        activeCourse && !isInPath(course) && course.nonGraded,
                         'highlighted-pre': activeCourse && isPrerequisite(course),
                         'highlighted-dep': activeCourse && isDependent(course),
-                        'non-graded': course.nonGraded,
+                        'non-graded':      course.nonGraded,
                       }
                     ]"
-                    @click="selectCourse(course)"
-                    @mouseenter="hoverCourse(course)"
-                    @mouseleave="scheduleHoverClear"
+                    @click.stop="selectCourse(course)"
+                    @mouseenter="onCardEnter(course)"
+                    @mouseleave="onCardLeave"
                   >
                     <div class="course-header">
                       <span class="course-code">{{ course.code }}</span>
@@ -187,8 +189,6 @@ const semestersContainer = ref<HTMLElement | null>(null)
 const pathwayContainer = ref<HTMLElement | null>(null)
 const courseTypeFilter = ref('')
 
-// Timer ref for debouncing hover-clear so moving between cards doesn't flicker
-let hoverClearTimer: ReturnType<typeof setTimeout> | null = null
 // rAF handle so we never queue more than one redraw per frame
 let rafHandle: number | null = null
 
@@ -207,8 +207,7 @@ const allCourses: Course[] = [
   { code: '26LCA1006J', title: 'Korean',                                       credits: 2, L:2, T:0, P:2, semester:1 },
   { code: '26LCA1007J', title: 'Spanish',                                      credits: 2, L:2, T:0, P:2, semester:1 },
   { code: '26LCA1008J', title: 'Russian',                                      credits: 2, L:2, T:0, P:2, semester:1 },
-  { code: '26CYB1002J', title: 'Chemistry for Computer Science',               credits: 4, L:2, T:1, P:2, semester:1,
-    prerequisiteCodes: [] },
+  { code: '26CYB1002J', title: 'Chemistry for Computer Science',               credits: 4, L:2, T:1, P:2, semester:1, prerequisiteCodes: [] },
   { code: '26BTB1001T', title: 'Introduction to Computational Biology',        credits: 2, L:2, T:0, P:0, semester:1 },
   { code: '26MAB1001T', title: 'Calculus and Linear Algebra',                  credits: 4, L:3, T:1, P:0, semester:1 },
   { code: '26CSE1002T', title: 'Programming for Problem Solving',              credits: 2, L:2, T:0, P:2, semester:1 },
@@ -225,34 +224,26 @@ const allCourses: Course[] = [
   { code: '26MAB1003T', title: 'Discrete Mathematics',                         credits: 4, L:3, T:1, P:0, semester:2 },
   { code: '26EEE1001T', title: 'Electrical and Electronics Engineering',       credits: 3, L:3, T:0, P:0, semester:2 },
   { code: '26MEE1002L', title: 'Engineering Graphics',                         credits: 2, L:0, T:0, P:4, semester:2 },
-  { code: '26OOP1001J', title: 'Object Oriented Design and Programming',       credits: 4, L:3, T:0, P:2, semester:2,
-    prerequisiteCodes: ['26CSE1002T'] },
-  { code: '26GNN1001T', title: 'Universal Human Values – Understanding Harmony and Ethical Human Conduct',
-                                                                               credits: 3, L:2, T:1, P:0, semester:2, nonGraded:true },
+  { code: '26OOP1001J', title: 'Object Oriented Design and Programming',       credits: 4, L:3, T:0, P:2, semester:2, prerequisiteCodes: ['26CSE1002T'] },
+  { code: '26GNN1001T', title: 'Universal Human Values – Understanding Harmony and Ethical Human Conduct', credits: 3, L:2, T:1, P:0, semester:2, nonGraded:true },
 
   // ── Semester 3 ──────────────────────────────────────────────────────────
-  { code: '26MAB2004T', title: 'Probability and Stochastic Process',           credits: 4, L:3, T:1, P:0, semester:3,
-    prerequisiteCodes: ['26MAB1003T'] },
+  { code: '26MAB2004T', title: 'Probability and Stochastic Process',           credits: 4, L:3, T:1, P:0, semester:3, prerequisiteCodes: ['26MAB1003T'] },
   { code: '26CSE2003J', title: 'Digital Logic and Circuit Design',             credits: 3, L:3, T:0, P:0, semester:3 },
-  { code: '26CSC2002J', title: 'Data Structures and Algorithms',               credits: 4, L:3, T:0, P:2, semester:3,
-    prerequisiteCodes: ['26OOP1001J'] },
+  { code: '26CSC2002J', title: 'Data Structures and Algorithms',               credits: 4, L:3, T:0, P:2, semester:3, prerequisiteCodes: ['26OOP1001J'] },
   { code: '26CSC2003J', title: 'Software Engineering and Project Management',  credits: 4, L:3, T:0, P:2, semester:3 },
-  { code: '26CSC2005J', title: 'Advanced Object Oriented Programming',         credits: 4, L:3, T:0, P:2, semester:3,
-    prerequisiteCodes: ['26OOP1001J'] },
-  { code: '26DCE1001T', title: 'Design Thinking and Methodology',             credits: 2, L:2, T:0, P:0, semester:3 },
+  { code: '26CSC2005J', title: 'Advanced Object Oriented Programming',         credits: 4, L:3, T:0, P:2, semester:3, prerequisiteCodes: ['26OOP1001J'] },
+  { code: '26DCE1001T', title: 'Design Thinking and Methodology',              credits: 2, L:2, T:0, P:0, semester:3 },
   { code: 'SEC-1',      title: 'Skill Enhancement Course - 1',                credits: 2, L:0, T:0, P:0, semester:3 },
   { code: '26LCN1001T', title: 'Indian Art, Culture and Constitution',         credits: 2, L:2, T:0, P:0, semester:3, nonGraded:true },
   { code: '26LCN1002T', title: 'Indian Traditional Knowledge',                 credits: 2, L:2, T:0, P:0, semester:3, nonGraded:true },
 
   // ── Semester 4 ──────────────────────────────────────────────────────────
-  { code: '26MAB2006J', title: 'Statistical Methods',                          credits: 4, L:3, T:0, P:2, semester:4,
-    prerequisiteCodes: ['26MAB2004T'] },
-  { code: '26CSC2004J', title: 'Design and Analysis of Algorithms',            credits: 4, L:3, T:0, P:2, semester:4,
-    prerequisiteCodes: ['26CSC2002J'] },
+  { code: '26MAB2006J', title: 'Statistical Methods',                          credits: 4, L:3, T:0, P:2, semester:4, prerequisiteCodes: ['26MAB2004T'] },
+  { code: '26CSC2004J', title: 'Design and Analysis of Algorithms',            credits: 4, L:3, T:0, P:2, semester:4, prerequisiteCodes: ['26CSC2002J'] },
   { code: '26CSC2011J', title: 'Operating Systems',                            credits: 4, L:3, T:0, P:2, semester:4 },
   { code: '26CSC2008T', title: 'Computer Organization and Architecture',       credits: 3, L:3, T:0, P:0, semester:4 },
-  { code: '26CSC2014J', title: 'Machine Learning',                             credits: 4, L:3, T:0, P:2, semester:4,
-    prerequisiteCodes: ['26CSE1001T', '26MAB2004T'] },
+  { code: '26CSC2014J', title: 'Machine Learning',                             credits: 4, L:3, T:0, P:2, semester:4, prerequisiteCodes: ['26CSE1001T', '26MAB2004T'] },
   { code: 'MDC-1',      title: 'Multidisciplinary Skill Course - 1',           credits: 3, L:0, T:0, P:0, semester:4 },
   { code: 'SEC-2',      title: 'Skill Enhancement Course - 2',                credits: 2, L:0, T:0, P:0, semester:4 },
   { code: '26LCN1003T', title: 'Professional Ethics and Values',               credits: 2, L:2, T:0, P:0, semester:4, nonGraded:true },
@@ -262,8 +253,7 @@ const allCourses: Course[] = [
   { code: '26CSC2007J', title: 'Computer Networks',                            credits: 4, L:3, T:0, P:2, semester:5 },
   { code: '26CSC3001J', title: 'Database Management Systems',                  credits: 4, L:3, T:0, P:2, semester:5 },
   { code: '26CSC3039T', title: 'Theory of Computation',                        credits: 3, L:3, T:0, P:0, semester:5 },
-  { code: '26CSC3026J', title: 'Deep Learning',                                credits: 4, L:3, T:0, P:2, semester:5,
-    prerequisiteCodes: ['26CSC2014J'] },
+  { code: '26CSC3026J', title: 'Deep Learning',                                credits: 4, L:3, T:0, P:2, semester:5, prerequisiteCodes: ['26CSC2014J'] },
   { code: 'DEC-1',      title: 'Discipline Elective Course - 1',              credits: 4, L:0, T:0, P:0, semester:5 },
   { code: 'MDC-2',      title: 'Multidisciplinary Skill Course - 2',           credits: 3, L:0, T:0, P:0, semester:5 },
   { code: 'SEC-3',      title: 'Skill Enhancement Course - 3',                credits: 2, L:0, T:0, P:0, semester:5 },
@@ -271,10 +261,8 @@ const allCourses: Course[] = [
   { code: '26CYN1002L', title: 'Community Connect',                            credits: 2, L:0, T:0, P:4, semester:5, nonGraded:true },
 
   // ── Semester 6 ──────────────────────────────────────────────────────────
-  { code: '26CSC3037J', title: 'Natural Language Processing',                  credits: 4, L:3, T:0, P:2, semester:6,
-    prerequisiteCodes: ['26CSC3026J'] },
-  { code: '26CSC3003J', title: 'Compiler Design',                              credits: 4, L:3, T:0, P:2, semester:6,
-    prerequisiteCodes: ['26CSC3039T'] },
+  { code: '26CSC3037J', title: 'Natural Language Processing',                  credits: 4, L:3, T:0, P:2, semester:6, prerequisiteCodes: ['26CSC3026J'] },
+  { code: '26CSC3003J', title: 'Compiler Design',                              credits: 4, L:3, T:0, P:2, semester:6, prerequisiteCodes: ['26CSC3039T'] },
   { code: 'DEC-2',      title: 'Discipline Elective Course - 2',              credits: 4, L:0, T:0, P:0, semester:6 },
   { code: 'DEC-3',      title: 'Discipline Elective Course - 3',              credits: 4, L:0, T:0, P:0, semester:6 },
   { code: 'MDC-3',      title: 'Multidisciplinary Skill Course - 3',           credits: 3, L:0, T:0, P:0, semester:6 },
@@ -324,13 +312,19 @@ function isLocked(c: Course): boolean {
   return !!lockedCourse.value && courseKey(lockedCourse.value) === courseKey(c)
 }
 
-function isInPath(c: Course): boolean {
+/** The card IS the active course (hovered or locked) */
+function isActive(c: Course): boolean {
   const active = activeCourse.value
   if (!active) return false
-  return isLocked(c) || isPrerequisite(c) || isDependent(c)
+  return courseKey(active) === courseKey(c)
 }
 
-const activeCourse = computed(() => hoveredCourse.value || lockedCourse.value)
+function isInPath(c: Course): boolean {
+  return isActive(c) || isPrerequisite(c) || isDependent(c)
+}
+
+// activeCourse: hover takes priority over lock while hovering, lock persists when not hovering
+const activeCourse = computed(() => hoveredCourse.value ?? lockedCourse.value)
 
 const coursesBySemester = computed(() => {
   const sems: Course[][] = Array.from({ length: 8 }, () => [])
@@ -338,36 +332,40 @@ const coursesBySemester = computed(() => {
   return sems
 })
 
+// ── Hover handling — NO timers, direct assignment ─────────────────────────
+// The jitter was caused by a 50 ms setTimeout in scheduleHoverClear.
+// When moving the mouse directly from card A to card B the sequence was:
+//   mouseleave(A) → timer starts → mouseenter(B) — but if the enter fires
+//   AFTER the 50 ms the timer already cleared hoveredCourse, producing a
+//   blank frame and a full redraw.  Direct assignment is instant and atomic.
+
+function onCardEnter(course: Course) {
+  // While a course is locked we still show the hover highlight on top
+  hoveredCourse.value = course
+  scheduleRedraw()
+}
+
+function onCardLeave() {
+  // Clear hover immediately — no timer needed.
+  // The next mouseenter (if the pointer moves to another card) fires
+  // synchronously before the browser paints, so there's no visible blank frame.
+  hoveredCourse.value = null
+  scheduleRedraw()
+}
+
 function selectCourse(course: Course) {
   if (lockedCourse.value && courseKey(lockedCourse.value) === courseKey(course)) {
-    clearSelection()
+    // Toggle off if clicking the already-locked course
+    lockedCourse.value = null
   } else {
     lockedCourse.value = course
-    hoveredCourse.value = null
-    nextTick(scheduleRedraw)
   }
-}
-
-// ── Debounced hover: cancel pending clear when entering a new card ─────────
-function hoverCourse(course: Course) {
-  // Cancel any pending clear so moving between cards doesn't cause a blank frame
-  if (lockedCourse.value) return
-  hoveredCourse.value = course
-}
-
-function scheduleHoverClear() {
-  // Don't clear immediately — wait 50 ms so the next card's mouseenter can cancel this
-  if (hoverClearTimer !== null) clearTimeout(hoverClearTimer)
-  hoverClearTimer = setTimeout(() => {
-    hoverClearTimer = null
-    hoveredCourse.value = null
-    scheduleRedraw()
-  }, 50)
+  // Hover state is separate — keep whatever the pointer is over right now
+  scheduleRedraw()
 }
 
 function clearSelection() {
   lockedCourse.value = null
-  hoveredCourse.value = null
   scheduleRedraw()
 }
 
@@ -390,7 +388,6 @@ function filterCourses(semester: Course[]): Course[] {
 
 // ── SVG connection drawing ─────────────────────────────────────────────────
 
-/** Size the SVG to match the scroll container — called on mount and resize only */
 function sizeSvg() {
   const svg = pathwaySvg.value
   const container = semestersContainer.value
@@ -400,7 +397,6 @@ function sizeSvg() {
   svg.style.height = container.scrollHeight + 'px'
 }
 
-/** Schedule a single redraw via rAF to avoid double-draws in one frame */
 function scheduleRedraw() {
   if (rafHandle !== null) cancelAnimationFrame(rafHandle)
   rafHandle = requestAnimationFrame(() => {
@@ -423,7 +419,6 @@ function redrawConnections() {
   const scrollLeft = container.scrollLeft
   const scrollTop = container.scrollTop
 
-  // Build position map from rendered cards
   const cards = container.querySelectorAll<HTMLElement>('.course-card')
   const posMap = new Map<string, DOMRect>()
   cards.forEach(card => {
@@ -502,7 +497,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (hoverClearTimer !== null) clearTimeout(hoverClearTimer)
   if (rafHandle !== null) cancelAnimationFrame(rafHandle)
   window.removeEventListener('resize', scheduleRedraw)
 })
@@ -564,9 +558,9 @@ main { flex: 1; }
 .info-text { font-size: 12px; color: var(--text-secondary,#64748b); margin: 0; }
 .pathway-legend { display: flex; gap: 20px; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary,#64748b); }
+.legend-dot.active-dot { color: var(--primary,#1a5f47); }
 .legend-dot.pre  { color: #dc2626; }
 .legend-dot.dep  { color: #16a34a; }
-.legend-dot.locked { color: var(--primary,#1a5f47); }
 
 .pathway-container {
   position: relative;
@@ -603,8 +597,6 @@ main { flex: 1; }
   border: 2px solid var(--border,#e2e8f0);
   border-radius: 8px; padding: 9px;
   cursor: pointer;
-  /* Use will-change + transform so opacity changes stay on the compositor
-     and don't trigger layout recalculations that cause jitter */
   will-change: opacity, transform;
   transition: opacity .15s ease, border-color .15s ease, box-shadow .15s ease, background .15s ease;
   min-height: 88px; display: flex; flex-direction: column;
@@ -612,34 +604,53 @@ main { flex: 1; }
   background: var(--surface-alt,#f8fafb);
   position: relative;
 }
-.course-card:hover:not(.faded) {
-  border-color: #94a3b8;
-  box-shadow: 0 3px 10px rgba(0,0,0,.1);
-}
-/* Use visibility+opacity combo: visibility keeps the space, opacity fades it.
-   pointer-events:none prevents interfering with mouse-path calculations. */
+
+/* Faded: fully inactive cards while a course is active */
 .course-card.faded {
   opacity: .08;
   pointer-events: none;
 }
+/* Non-graded inactive cards fade a bit less so they stay legible */
+.course-card.faded-ng {
+  opacity: .12;
+  pointer-events: none;
+}
+
+/* The active course itself (hovered or locked) */
+.course-card.highlighted-active {
+  border-color: var(--primary,#1a5f47);
+  background: #ecfdf8;
+  box-shadow: 0 4px 16px rgba(26,95,71,.28);
+  outline: 2px solid rgba(26,95,71,.18);
+  outline-offset: 2px;
+}
+
+/* Prerequisite highlight */
 .course-card.highlighted-pre {
   border-color: #dc2626;
   background: #fff5f5;
   box-shadow: 0 3px 12px rgba(220,38,38,.18);
 }
+
+/* Dependent highlight */
 .course-card.highlighted-dep {
   border-color: #16a34a;
   background: #f0fdf4;
   box-shadow: 0 3px 12px rgba(22,163,74,.18);
 }
+
+/* Locked adds a ring on top of highlighted-active */
 .course-card.locked {
   border-color: var(--primary,#1a5f47);
   background: #ecfdf8;
-  box-shadow: 0 4px 16px rgba(26,95,71,.22);
+  box-shadow: 0 4px 20px rgba(26,95,71,.32);
+  outline: 2px solid var(--primary,#1a5f47);
+  outline-offset: 2px;
 }
+
 .course-card.non-graded { opacity: .75; font-style: italic; }
-/* faded always wins over non-graded baseline opacity */
-.course-card.non-graded.faded { opacity: .08; }
+.course-card.non-graded.faded,
+.course-card.non-graded.faded-ng { opacity: .12; }
 
 /* type color strip on left border */
 .course-card.type-t { border-left: 4px solid #3b82f6; }
