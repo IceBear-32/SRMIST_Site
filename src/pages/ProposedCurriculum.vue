@@ -60,7 +60,7 @@
                       getCourseType(course) === 'J' ? 'type-j' : getCourseType(course) === 'L' ? 'type-l' : 'type-t',
                       {
                         'locked': isLocked(course),
-                        'faded': activeCourse && !isLocked(course) && !isInPath(course),
+                        'faded': activeCourse && !isLocked(course) && (!isInPath(course) || course.nonGraded),
                         'highlighted-pre': activeCourse && isPrerequisite(course),
                         'highlighted-dep': activeCourse && isDependent(course),
                         'non-graded': course.nonGraded,
@@ -68,7 +68,7 @@
                     ]"
                     @click="selectCourse(course)"
                     @mouseenter="hoverCourse(course)"
-                    @mouseleave="clearHover"
+                    @mouseleave="scheduleHoverClear"
                   >
                     <div class="course-header">
                       <span class="course-code">{{ course.code }}</span>
@@ -165,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 
 interface Course {
   code: string
@@ -176,7 +176,7 @@ interface Course {
   P: number
   semester: number
   nonGraded?: boolean
-  prerequisiteCodes?: string[] // list of prerequisite course codes
+  prerequisiteCodes?: string[]
 }
 
 const activeTab = ref<'pathway' | 'career'>('pathway')
@@ -187,14 +187,17 @@ const semestersContainer = ref<HTMLElement | null>(null)
 const pathwayContainer = ref<HTMLElement | null>(null)
 const courseTypeFilter = ref('')
 
+// Timer ref for debouncing hover-clear so moving between cards doesn't flicker
+let hoverClearTimer: ReturnType<typeof setTimeout> | null = null
+// rAF handle so we never queue more than one redraw per frame
+let rafHandle: number | null = null
+
 const tabs = [
   { id: 'pathway', label: 'Course Pathway' },
   { id: 'career', label: 'Career Mapping' },
 ]
 
-// ── Course data extracted from the uploaded image ──────────────────────────
-// prerequisiteCodes references code+title combos resolved below for uniqueness.
-// Using a composite key: code|title (first 20 chars) to handle duplicate codes.
+// ── Course data ────────────────────────────────────────────────────────────
 const allCourses: Course[] = [
   // ── Semester 1 ──────────────────────────────────────────────────────────
   { code: '26LCA1002J', title: 'Chinese',                                      credits: 2, L:2, T:0, P:2, semester:1 },
@@ -296,13 +299,11 @@ function courseKey(c: Course) {
   return c.code + '|' + c.title
 }
 
-/** Get Course objects that are prerequisites of the given course */
 function getPrerequisites(course: Course): Course[] {
   if (!course.prerequisiteCodes?.length) return []
   return allCourses.filter(c => course.prerequisiteCodes!.includes(c.code))
 }
 
-/** Get Course objects that depend on the given course */
 function getDependents(course: Course): Course[] {
   return allCourses.filter(c => c.prerequisiteCodes?.includes(course.code))
 }
@@ -329,7 +330,6 @@ function isInPath(c: Course): boolean {
   return isLocked(c) || isPrerequisite(c) || isDependent(c)
 }
 
-/** The currently "active" course (hovered overrides locked for preview) */
 const activeCourse = computed(() => hoveredCourse.value || lockedCourse.value)
 
 const coursesBySemester = computed(() => {
@@ -344,25 +344,36 @@ function selectCourse(course: Course) {
   } else {
     lockedCourse.value = course
     hoveredCourse.value = null
-    nextTick(redrawConnections)
+    nextTick(scheduleRedraw)
   }
 }
 
+// ── Debounced hover: cancel pending clear when entering a new card ─────────
 function hoverCourse(course: Course) {
-  if (lockedCourse.value) return // don't override locked
+  // Cancel any pending clear so moving between cards doesn't cause a blank frame
+  if (hoverClearTimer !== null) {
+    clearTimeout(hoverClearTimer)
+    hoverClearTimer = null
+  }
+  if (lockedCourse.value) return
   hoveredCourse.value = course
-  nextTick(redrawConnections)
+  nextTick(scheduleRedraw)
 }
 
-function clearHover() {
-  hoveredCourse.value = null
-  nextTick(redrawConnections)
+function scheduleHoverClear() {
+  // Don't clear immediately — wait 50 ms so the next card's mouseenter can cancel this
+  if (hoverClearTimer !== null) clearTimeout(hoverClearTimer)
+  hoverClearTimer = setTimeout(() => {
+    hoverClearTimer = null
+    hoveredCourse.value = null
+    scheduleRedraw()
+  }, 50)
 }
 
 function clearSelection() {
   lockedCourse.value = null
   hoveredCourse.value = null
-  nextTick(redrawConnections)
+  scheduleRedraw()
 }
 
 function getTotalCredits(semester: Course[]): number {
@@ -373,7 +384,6 @@ function getCourseType(course: Course): string {
   if (course.code.endsWith('J')) return 'J'
   if (course.code.endsWith('L')) return 'L'
   if (course.code.endsWith('T')) return 'T'
-  // Generic elective codes
   if (course.code.startsWith('DEC') || course.code.startsWith('SEC') || course.code.startsWith('MDC')) return 'T'
   return 'T'
 }
@@ -384,22 +394,41 @@ function filterCourses(semester: Course[]): Course[] {
 }
 
 // ── SVG connection drawing ─────────────────────────────────────────────────
+
+/** Size the SVG to match the scroll container — called on mount and resize only */
+function sizeSvg() {
+  const svg = pathwaySvg.value
+  const container = semestersContainer.value
+  if (!svg || !container) return
+  svg.setAttribute('viewBox', `0 0 ${container.scrollWidth} ${container.scrollHeight}`)
+  svg.style.width = container.scrollWidth + 'px'
+  svg.style.height = container.scrollHeight + 'px'
+}
+
+/** Schedule a single redraw via rAF to avoid double-draws in one frame */
+function scheduleRedraw() {
+  if (rafHandle !== null) cancelAnimationFrame(rafHandle)
+  rafHandle = requestAnimationFrame(() => {
+    rafHandle = null
+    redrawConnections()
+  })
+}
+
 function redrawConnections() {
   const svg = pathwaySvg.value
   const container = semestersContainer.value
   if (!svg || !container) return
 
-  // Size the SVG to match the scroll container
-  const containerRect = container.getBoundingClientRect()
-  svg.setAttribute('viewBox', `0 0 ${container.scrollWidth} ${container.scrollHeight}`)
-  svg.style.width = container.scrollWidth + 'px'
-  svg.style.height = container.scrollHeight + 'px'
   svg.innerHTML = ''
 
   const active = activeCourse.value
   if (!active) return
 
-  // Build a map: courseKey → card element
+  const containerRect = container.getBoundingClientRect()
+  const scrollLeft = container.scrollLeft
+  const scrollTop = container.scrollTop
+
+  // Build position map from rendered cards
   const cards = container.querySelectorAll<HTMLElement>('.course-card')
   const posMap = new Map<string, DOMRect>()
   cards.forEach(card => {
@@ -411,9 +440,6 @@ function redrawConnections() {
   const activeRect = posMap.get(activeKey)
   if (!activeRect) return
 
-  const scrollLeft = container.scrollLeft
-  const scrollTop = container.scrollTop
-
   function rectCenter(r: DOMRect) {
     return {
       x: r.left - containerRect.left + scrollLeft + r.width / 2,
@@ -423,7 +449,30 @@ function redrawConnections() {
 
   const activePos = rectCenter(activeRect)
 
-  const drawLine = (from: {x:number,y:number}, to: {x:number,y:number}, color: string, dashed = false) => {
+  function getOrCreateMarker(color: string) {
+    const markerId = 'arrow-' + color.replace('#', '')
+    if (svg!.querySelector(`#${markerId}`)) return markerId
+    let defs = svg!.querySelector('defs')
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+      svg!.prepend(defs)
+    }
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker')
+    marker.setAttribute('id', markerId)
+    marker.setAttribute('markerWidth', '8')
+    marker.setAttribute('markerHeight', '8')
+    marker.setAttribute('refX', '6')
+    marker.setAttribute('refY', '3')
+    marker.setAttribute('orient', 'auto')
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+    poly.setAttribute('points', '0 0, 8 3, 0 6')
+    poly.setAttribute('fill', color)
+    marker.appendChild(poly)
+    defs.appendChild(marker)
+    return markerId
+  }
+
+  const drawLine = (from: {x:number,y:number}, to: {x:number,y:number}, color: string) => {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     const mx = (from.x + to.x) / 2
     const d = `M ${from.x} ${from.y} C ${mx} ${from.y}, ${mx} ${to.y}, ${to.x} ${to.y}`
@@ -432,29 +481,7 @@ function redrawConnections() {
     path.setAttribute('stroke-width', '2.5')
     path.setAttribute('fill', 'none')
     path.setAttribute('stroke-linecap', 'round')
-    if (dashed) path.setAttribute('stroke-dasharray', '6,4')
-    // Arrow marker
-    const markerId = 'arrow-' + color.replace('#', '')
-    if (!svg!.querySelector(`#${markerId}`)) {
-      const defs = svg!.querySelector('defs') || (() => {
-        const d2 = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
-        svg!.prepend(d2)
-        return d2
-      })()
-      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker')
-      marker.setAttribute('id', markerId)
-      marker.setAttribute('markerWidth', '8')
-      marker.setAttribute('markerHeight', '8')
-      marker.setAttribute('refX', '6')
-      marker.setAttribute('refY', '3')
-      marker.setAttribute('orient', 'auto')
-      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
-      poly.setAttribute('points', '0 0, 8 3, 0 6')
-      poly.setAttribute('fill', color)
-      marker.appendChild(poly)
-      defs.appendChild(marker)
-    }
-    path.setAttribute('marker-end', `url(#${markerId})`)
+    path.setAttribute('marker-end', `url(#${getOrCreateMarker(color)})`)
     svg!.appendChild(path)
   }
 
@@ -471,15 +498,18 @@ function redrawConnections() {
   })
 }
 
-watch(activeTab, () => {
-  nextTick(redrawConnections)
-})
+watch(activeTab, () => nextTick(() => { sizeSvg(); scheduleRedraw() }))
 
 onMounted(() => {
-  nextTick(redrawConnections)
-  // Redraw on scroll too
-  semestersContainer.value?.addEventListener('scroll', redrawConnections)
-  window.addEventListener('resize', redrawConnections)
+  nextTick(() => { sizeSvg(); scheduleRedraw() })
+  semestersContainer.value?.addEventListener('scroll', scheduleRedraw)
+  window.addEventListener('resize', () => { sizeSvg(); scheduleRedraw() })
+})
+
+onBeforeUnmount(() => {
+  if (hoverClearTimer !== null) clearTimeout(hoverClearTimer)
+  if (rafHandle !== null) cancelAnimationFrame(rafHandle)
+  window.removeEventListener('resize', scheduleRedraw)
 })
 </script>
 
@@ -577,7 +607,11 @@ main { flex: 1; }
 .course-card {
   border: 2px solid var(--border,#e2e8f0);
   border-radius: 8px; padding: 9px;
-  cursor: pointer; transition: all .2s ease;
+  cursor: pointer;
+  /* Use will-change + transform so opacity changes stay on the compositor
+     and don't trigger layout recalculations that cause jitter */
+  will-change: opacity, transform;
+  transition: opacity .15s ease, border-color .15s ease, box-shadow .15s ease, background .15s ease;
   min-height: 88px; display: flex; flex-direction: column;
   justify-content: space-between;
   background: var(--surface-alt,#f8fafb);
@@ -587,7 +621,12 @@ main { flex: 1; }
   border-color: #94a3b8;
   box-shadow: 0 3px 10px rgba(0,0,0,.1);
 }
-.course-card.faded { opacity: .08; pointer-events: none; }
+/* Use visibility+opacity combo: visibility keeps the space, opacity fades it.
+   pointer-events:none prevents interfering with mouse-path calculations. */
+.course-card.faded {
+  opacity: .08;
+  pointer-events: none;
+}
 .course-card.highlighted-pre {
   border-color: #dc2626;
   background: #fff5f5;
@@ -604,6 +643,8 @@ main { flex: 1; }
   box-shadow: 0 4px 16px rgba(26,95,71,.22);
 }
 .course-card.non-graded { opacity: .75; font-style: italic; }
+/* faded always wins over non-graded baseline opacity */
+.course-card.non-graded.faded { opacity: .08; }
 
 /* type color strip on left border */
 .course-card.type-t { border-left: 4px solid #3b82f6; }
