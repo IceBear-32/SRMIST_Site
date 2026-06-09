@@ -4,6 +4,7 @@ import AgendaPoints from '../pages/AgendaPoints.vue'
 import BoSMembers from '../pages/BoSMembers.vue'
 import AboutDept from '../pages/AboutDept.vue'
 import AboutInstitution from '../pages/AboutInstitution.vue'
+import ProposedCurriculum from '../pages/ProposedCurriculum.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -25,6 +26,10 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/about-institution',
     component: AboutInstitution
+  },
+  {
+    path: '/proposed-curriculum',
+    component: ProposedCurriculum
   }
 ]
 

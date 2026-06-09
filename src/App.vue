@@ -26,6 +26,7 @@
 
         <ul class="nav-items" :class="{ active: mobileMenuOpen }">
           <li><router-link to="/" class="nav-link" @click="mobileMenuOpen = false">Welcome</router-link></li>
+          <li><router-link to="/proposed-curriculum" class="nav-link" @click="mobileMenuOpen = false">Curriculum</router-link></li>
           <li><router-link to="/agenda-points" class="nav-link" @click="mobileMenuOpen = false">Agenda</router-link></li>
           <li><router-link to="/about-department" class="nav-link" @click="mobileMenuOpen = false">Department</router-link></li>
           <li><router-link to="/about-institution" class="nav-link" @click="mobileMenuOpen = false">Institution</router-link></li>
@@ -48,14 +49,6 @@
             </div>
           </li>
         </ul>
-
-        <div class="nav-actions">
-          <button class="icon-btn search-btn" aria-label="Search">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.003.004.009.01.012.015l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.012-.015zM12.5 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
-            </svg>
-          </button>
-        </div>
       </div>
     </nav>
 
@@ -167,16 +160,19 @@ const moreOpen = ref(false)
 }
 
 .hamburger.open span:nth-child(1) {
-  transform: rotate(45deg) translate(8px, 8px);
+  transform: rotate(45deg) translate(9px, 9px);
+  background-color: var(--primary);
 }
 
 .hamburger.open span:nth-child(2) {
   opacity: 0;
-  transform: translateX(-10px);
+  transform: translateX(-15px);
+  background-color: var(--primary);
 }
 
 .hamburger.open span:nth-child(3) {
-  transform: rotate(-45deg) translate(8px, -8px);
+  transform: rotate(-45deg) translate(7px, -7px);
+  background-color: var(--primary);
 }
 
 .nav-items {
@@ -297,34 +293,6 @@ const moreOpen = ref(false)
   color: var(--primary);
   border-left-color: var(--primary);
   padding-left: 20px;
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: var(--surface-alt);
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--text-primary);
-  transition: all 0.3s ease;
-  padding: 0;
-}
-
-.icon-btn:hover {
-  background: var(--primary);
-  color: white;
-  transform: scale(1.05);
 }
 
 .footer {
@@ -449,15 +417,6 @@ const moreOpen = ref(false)
   .dropdown-item:hover {
     padding-left: 32px;
   }
-
-  .nav-actions {
-    gap: 8px;
-  }
-
-  .icon-btn {
-    width: 38px;
-    height: 38px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -481,11 +440,6 @@ const moreOpen = ref(false)
 
   .nav-items {
     top: 56px;
-  }
-
-  .icon-btn {
-    width: 36px;
-    height: 36px;
   }
 
   .dropdown-item {
