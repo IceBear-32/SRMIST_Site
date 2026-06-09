@@ -351,13 +351,8 @@ function selectCourse(course: Course) {
 // ── Debounced hover: cancel pending clear when entering a new card ─────────
 function hoverCourse(course: Course) {
   // Cancel any pending clear so moving between cards doesn't cause a blank frame
-  if (hoverClearTimer !== null) {
-    clearTimeout(hoverClearTimer)
-    hoverClearTimer = null
-  }
   if (lockedCourse.value) return
   hoveredCourse.value = course
-  nextTick(scheduleRedraw)
 }
 
 function scheduleHoverClear() {
