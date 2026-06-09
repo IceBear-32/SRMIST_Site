@@ -2,15 +2,13 @@
   <main>
     <section class="curriculum-section">
       <div class="container">
-        <!-- Header -->
         <div class="curriculum-header">
           <h1 class="page-title">Proposed Curriculum</h1>
-          <p class="page-subtitle">B.Tech Computer Science Engineering (AIML) - Regulation 2026</p>
+          <p class="page-subtitle">B.Tech Computer Science Engineering (AIML) — Regulation 2026</p>
         </div>
 
-        <!-- Tab Navigation -->
         <div class="tabs-container">
-          <button 
+          <button
             v-for="tab in tabs"
             :key="tab.id"
             :class="['tab-btn', { active: activeTab === tab.id }]"
@@ -25,16 +23,16 @@
           <div class="pathway-header">
             <div class="pathway-info">
               <h2>Course Dependency Pathway</h2>
-              <p class="info-text">Click any course to lock and view dependencies. Hover to preview.</p>
+              <p class="info-text">Hover a course to preview links. Click to lock the selection.</p>
             </div>
             <div class="pathway-legend">
               <div class="legend-item">
                 <span class="legend-dot pre">■</span>
-                <span>Prerequisites</span>
+                <span>Prerequisite</span>
               </div>
               <div class="legend-item">
                 <span class="legend-dot dep">■</span>
-                <span>Dependents</span>
+                <span>Dependent</span>
               </div>
               <div class="legend-item">
                 <span class="legend-dot locked">■</span>
@@ -43,38 +41,43 @@
             </div>
           </div>
 
-          <div class="pathway-container">
+          <div class="pathway-container" ref="pathwayContainer">
             <svg class="pathway-svg" ref="pathwaySvg"></svg>
-            
+
             <div class="semesters-container" ref="semestersContainer">
               <div v-for="(semester, index) in coursesBySemester" :key="index" class="semester-column">
                 <div class="semester-header">
                   <h3>Semester {{ index + 1 }}</h3>
-                  <span class="credits-badge">{{ getTotalCredits(semester) }} Credits</span>
+                  <span class="credits-badge">{{ getTotalCredits(semester) }} Cr</span>
                 </div>
                 <div class="courses-list">
-                  <div 
+                  <div
                     v-for="course in semester"
-                    :key="course.code"
-                    :class="['course-card', {
-                      'has-prereq': hasPrerequisites(course.code),
-                      'has-dependent': hasDependents(course.code),
-                      'locked': lockedCourse?.code === course.code,
-                      'faded': lockedCourse && lockedCourse.code !== course.code && !isInPath(course.code),
-                      'highlighted': lockedCourse && (isPrerequisite(course.code) || isDependent(course.code) || lockedCourse.code === course.code)
-                    }]"
+                    :key="course.code + course.title"
+                    :data-key="course.code + '_' + course.title.slice(0,10)"
+                    :class="[
+                      'course-card',
+                      getCourseType(course) === 'J' ? 'type-j' : getCourseType(course) === 'L' ? 'type-l' : 'type-t',
+                      {
+                        'locked': isLocked(course),
+                        'faded': activeCourse && !isLocked(course) && !isInPath(course),
+                        'highlighted-pre': activeCourse && isPrerequisite(course),
+                        'highlighted-dep': activeCourse && isDependent(course),
+                        'non-graded': course.nonGraded,
+                      }
+                    ]"
                     @click="selectCourse(course)"
                     @mouseenter="hoverCourse(course)"
                     @mouseleave="clearHover"
                   >
                     <div class="course-header">
-                      <h4 class="course-code">{{ course.code }}</h4>
-                      <span class="course-type" :data-type="getCourseType(course.code)">{{ getCourseType(course.code) }}</span>
+                      <span class="course-code">{{ course.code }}</span>
+                      <span class="course-type-badge">{{ getCourseType(course) }}</span>
                     </div>
                     <p class="course-title">{{ course.title }}</p>
                     <div class="course-footer">
                       <span class="credits">{{ course.credits }}C</span>
-                      <span class="hours">{{ course.hours }}</span>
+                      <span class="hours">{{ course.L }}-{{ course.T }}-{{ course.P }}</span>
                     </div>
                   </div>
                 </div>
@@ -83,34 +86,39 @@
           </div>
 
           <!-- Dependencies Panel -->
-          <div v-if="lockedCourse" class="dependencies-panel">
-            <div class="panel-header">
-              <h3>{{ lockedCourse.code }} - {{ lockedCourse.title }}</h3>
-              <button @click="clearSelection" class="close-btn">✕</button>
-            </div>
-            <div class="panel-content">
-              <div class="dependencies-section">
-                <h4>Prerequisites</h4>
-                <div v-if="getPrerequisites(lockedCourse.code).length > 0" class="dependencies-list">
-                  <div v-for="dep in getPrerequisites(lockedCourse.code)" :key="dep" class="dependency-item">
-                    <span class="dep-badge pre">PRE</span>
-                    <span>{{ dep }}</span>
-                  </div>
+          <transition name="slide-panel">
+            <div v-if="lockedCourse" class="dependencies-panel">
+              <div class="panel-header">
+                <div>
+                  <div class="panel-code">{{ lockedCourse.code }}</div>
+                  <div class="panel-title">{{ lockedCourse.title }}</div>
                 </div>
-                <p v-else class="no-deps">No prerequisites</p>
+                <button @click="clearSelection" class="close-btn">✕</button>
               </div>
-              <div class="dependencies-section">
-                <h4>Dependents</h4>
-                <div v-if="getDependents(lockedCourse.code).length > 0" class="dependencies-list">
-                  <div v-for="dep in getDependents(lockedCourse.code)" :key="dep" class="dependency-item">
-                    <span class="dep-badge dep">DEP</span>
-                    <span>{{ dep }}</span>
+              <div class="panel-content">
+                <div class="dependencies-section">
+                  <h4>Prerequisites</h4>
+                  <div v-if="getPrerequisites(lockedCourse).length > 0" class="dependencies-list">
+                    <div v-for="dep in getPrerequisites(lockedCourse)" :key="dep.code + dep.title" class="dependency-item">
+                      <span class="dep-badge pre">PRE</span>
+                      <span>{{ dep.code }} – {{ dep.title }}</span>
+                    </div>
                   </div>
+                  <p v-else class="no-deps">No prerequisites</p>
                 </div>
-                <p v-else class="no-deps">No dependent courses</p>
+                <div class="dependencies-section">
+                  <h4>Dependents</h4>
+                  <div v-if="getDependents(lockedCourse).length > 0" class="dependencies-list">
+                    <div v-for="dep in getDependents(lockedCourse)" :key="dep.code + dep.title" class="dependency-item">
+                      <span class="dep-badge dep">DEP</span>
+                      <span>{{ dep.code }} – {{ dep.title }}</span>
+                    </div>
+                  </div>
+                  <p v-else class="no-deps">No dependent courses</p>
+                </div>
               </div>
             </div>
-          </div>
+          </transition>
         </div>
 
         <!-- Career Mapping View -->
@@ -119,7 +127,7 @@
             <h2>Career Mapping Matrix</h2>
             <div class="filters">
               <select v-model="courseTypeFilter" class="filter-select">
-                <option value="">All Course Types</option>
+                <option value="">All Types</option>
                 <option value="T">Theory (T)</option>
                 <option value="L">Laboratory (L)</option>
                 <option value="J">Lab + Theory (J)</option>
@@ -130,18 +138,22 @@
           <div class="career-matrix">
             <div v-for="(semester, index) in coursesBySemester" :key="index" class="career-column">
               <div class="column-header">
-                <h3>Semester {{ index + 1 }}</h3>
+                <h3>Sem {{ index + 1 }}</h3>
+                <span class="credits-badge">{{ getTotalCredits(semester) }} Cr</span>
               </div>
               <div class="career-courses">
-                <div 
+                <div
                   v-for="course in filterCourses(semester)"
-                  :key="course.code"
+                  :key="course.code + course.title"
                   class="career-course"
-                  :data-type="getCourseType(course.code)"
+                  :data-type="getCourseType(course)"
                 >
                   <div class="career-course-code">{{ course.code }}</div>
                   <div class="career-course-title">{{ course.title }}</div>
-                  <div class="career-course-type">{{ getCourseType(course.code) }}</div>
+                  <div class="career-course-meta">
+                    <span class="career-type-badge">{{ getCourseType(course) }}</span>
+                    <span class="career-credits">{{ course.credits }}C</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -153,810 +165,543 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 
 interface Course {
   code: string
   title: string
   credits: number
-  hours: string
+  L: number
+  T: number
+  P: number
   semester: number
-  prerequisites?: string[]
-  dependents?: string[]
+  nonGraded?: boolean
+  prerequisiteCodes?: string[] // list of prerequisite course codes
 }
 
 const activeTab = ref<'pathway' | 'career'>('pathway')
 const lockedCourse = ref<Course | null>(null)
 const hoveredCourse = ref<Course | null>(null)
-const pathwaySvg = ref<SVGElement | null>(null)
+const pathwaySvg = ref<SVGSVGElement | null>(null)
 const semestersContainer = ref<HTMLElement | null>(null)
+const pathwayContainer = ref<HTMLElement | null>(null)
 const courseTypeFilter = ref('')
 
 const tabs = [
   { id: 'pathway', label: 'Course Pathway' },
-  { id: 'career', label: 'Career Mapping' }
+  { id: 'career', label: 'Career Mapping' },
 ]
 
+// ── Course data extracted from the uploaded image ──────────────────────────
+// prerequisiteCodes references code+title combos resolved below for uniqueness.
+// Using a composite key: code|title (first 20 chars) to handle duplicate codes.
 const allCourses: Course[] = [
-  // Semester 1
-  { code: '26L10MT101', title: 'Mathematics I', credits: 3, hours: '3-1-0', semester: 1 },
-  { code: '26L10PH102', title: 'Physics for Computer Science Engineers', credits: 3, hours: '3-2-0', semester: 1 },
-  { code: '26L10EN101', title: 'Technical English', credits: 3, hours: '3-0-2', semester: 1 },
-  { code: '26L10CS102', title: 'Problem Solving Using C', credits: 4, hours: '3-0-2', semester: 1 },
-  { code: '26L10EN101', title: 'Introduction to Engineering I', credits: 1, hours: '0-0-2', semester: 1 },
-  { code: '26L10DM101', title: 'Induction Program', credits: 0, hours: '0-0-0', semester: 1 },
-  { code: '26L10CS101', title: 'Career Skill Development I', credits: 1, hours: '0-0-2', semester: 1 },
-  // Language Courses Semester 1 - All variants
-  { code: '26L10A1041', title: 'Chinese', credits: 2, hours: '2-0-1', semester: 1 },
-  { code: '26L10A1042', title: 'German', credits: 2, hours: '2-0-1', semester: 1 },
-  { code: '26L10A1043', title: 'Spanish', credits: 2, hours: '2-0-1', semester: 1 },
-  { code: '26L10A1044', title: 'French', credits: 2, hours: '2-0-1', semester: 1 },
-  { code: '26L10A1045', title: 'Korean', credits: 2, hours: '2-0-1', semester: 1 },
-  { code: '26L10A1046', title: 'Japanese', credits: 2, hours: '2-0-1', semester: 1 },
+  // ── Semester 1 ──────────────────────────────────────────────────────────
+  { code: '26LCA1002J', title: 'Chinese',                                      credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26LCA1003J', title: 'French',                                       credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26LCA1004J', title: 'German',                                       credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26LCA1005J', title: 'Japanese',                                     credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26LCA1006J', title: 'Korean',                                       credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26LCA1007J', title: 'Spanish',                                      credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26LCA1008J', title: 'Russian',                                      credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26CYB1002J', title: 'Chemistry for Computer Science',               credits: 4, L:2, T:1, P:2, semester:1,
+    prerequisiteCodes: [] },
+  { code: '26BTB1001T', title: 'Introduction to Computational Biology',        credits: 2, L:2, T:0, P:0, semester:1 },
+  { code: '26MAB1001T', title: 'Calculus and Linear Algebra',                  credits: 4, L:3, T:1, P:0, semester:1 },
+  { code: '26CSE1002T', title: 'Programming for Problem Solving',              credits: 2, L:2, T:0, P:2, semester:1 },
+  { code: '26MEE1001T', title: 'Workshop Practice',                            credits: 2, L:0, T:0, P:4, semester:1 },
+  { code: '26GNN1004T', title: 'National Service Scheme',                      credits: 2, L:0, T:0, P:0, semester:1, nonGraded:true },
+  { code: '26GNN1005L', title: 'National Cadet Corps',                         credits: 2, L:0, T:1, P:0, semester:1, nonGraded:true },
+  { code: '26GNN1006L', title: 'National Sports Organization',                 credits: 2, L:0, T:0, P:4, semester:1, nonGraded:true },
+  { code: '26GNN1007J', title: 'Physical and Mental Health using Yoga',        credits: 2, L:0, T:0, P:2, semester:1, nonGraded:true },
 
-  // Semester 2
-  { code: '26L10MT201', title: 'Professional English for Engineers', credits: 2, hours: '2-0-2', semester: 2 },
-  { code: '26L10PH211', title: 'Physics for Computational Intelligence', credits: 3, hours: '3-0-2', semester: 2 },
-  { code: '26L10AM201', title: 'Discrete Mathematics', credits: 3, hours: '3-1-0', semester: 2 },
-  { code: '26L10PH203', title: 'Chemistry for Civil Engineering', credits: 3, hours: '2-1-2', semester: 2 },
-  { code: '26L10CS202', title: 'Engineering Graphics', credits: 3, hours: '2-0-2', semester: 2 },
-  { code: '26L10CS203', title: 'Programming in C and Data Structures', credits: 4, hours: '3-1-0', semester: 2 },
-  { code: '26L10EN201', title: 'Environmental Studies', credits: 2, hours: '2-0-0', semester: 2 },
-  { code: '26L10EN1011', title: 'Introduction to Engineering II', credits: 1, hours: '0-0-2', semester: 2 },
-  { code: '26L10CS201', title: 'Career Skill Development II', credits: 1, hours: '0-0-2', semester: 2 },
+  // ── Semester 2 ──────────────────────────────────────────────────────────
+  { code: '26LCA1001J', title: 'Professional English for Engineers',           credits: 3, L:2, T:0, P:2, semester:2 },
+  { code: '26PYB1001J', title: 'Physics for Computational Intelligence',       credits: 4, L:2, T:1, P:2, semester:2 },
+  { code: '26CSE1001T', title: 'Data Science and Artificial Intelligence',     credits: 3, L:2, T:1, P:0, semester:2 },
+  { code: '26MAB1003T', title: 'Discrete Mathematics',                         credits: 4, L:3, T:1, P:0, semester:2 },
+  { code: '26EEE1001T', title: 'Electrical and Electronics Engineering',       credits: 3, L:3, T:0, P:0, semester:2 },
+  { code: '26MEE1002L', title: 'Engineering Graphics',                         credits: 2, L:0, T:0, P:4, semester:2 },
+  { code: '26OOP1001J', title: 'Object Oriented Design and Programming',       credits: 4, L:3, T:0, P:2, semester:2,
+    prerequisiteCodes: ['26CSE1002T'] },
+  { code: '26GNN1001T', title: 'Universal Human Values – Understanding Harmony and Ethical Human Conduct',
+                                                                               credits: 3, L:2, T:1, P:0, semester:2, nonGraded:true },
 
-  // Semester 3
-  { code: '26L10AM3047', title: 'Probability, Statistics and Numerical Methods', credits: 4, hours: '3-1-0', semester: 3 },
-  { code: '26L10CS3002', title: 'Data Structures', credits: 4, hours: '3-1-0', semester: 3 },
-  { code: '26L10CS3003', title: 'Structural Analysis I', credits: 3, hours: '3-0-0', semester: 3 },
-  { code: '26L10CS3002', title: 'Transportation Engineering', credits: 4, hours: '3-1-0', semester: 3 },
-  { code: '26L10CS3002', title: 'Geotechnical Engineering', credits: 4, hours: '3-1-0', semester: 3 },
-  { code: '26L10CS3003', title: 'Fluid Mechanics & Hydraulics', credits: 3, hours: '3-1-0', semester: 3 },
-  { code: '26L10CS3001', title: 'Concrete Technology', credits: 3, hours: '3-0-0', semester: 3 },
-  { code: '26L10CS3001', title: 'Career Skill Development III', credits: 1, hours: '0-0-2', semester: 3 },
+  // ── Semester 3 ──────────────────────────────────────────────────────────
+  { code: '26MAB2004T', title: 'Probability and Stochastic Process',           credits: 4, L:3, T:1, P:0, semester:3,
+    prerequisiteCodes: ['26MAB1003T'] },
+  { code: '26CSE2003J', title: 'Digital Logic and Circuit Design',             credits: 3, L:3, T:0, P:0, semester:3 },
+  { code: '26CSC2002J', title: 'Data Structures and Algorithms',               credits: 4, L:3, T:0, P:2, semester:3,
+    prerequisiteCodes: ['26OOP1001J'] },
+  { code: '26CSC2003J', title: 'Software Engineering and Project Management',  credits: 4, L:3, T:0, P:2, semester:3 },
+  { code: '26CSC2005J', title: 'Advanced Object Oriented Programming',         credits: 4, L:3, T:0, P:2, semester:3,
+    prerequisiteCodes: ['26OOP1001J'] },
+  { code: '26DCE1001T', title: 'Design Thinking and Methodology',             credits: 2, L:2, T:0, P:0, semester:3 },
+  { code: 'SEC-1',      title: 'Skill Enhancement Course - 1',                credits: 2, L:0, T:0, P:0, semester:3 },
+  { code: '26LCN1001T', title: 'Indian Art, Culture and Constitution',         credits: 2, L:2, T:0, P:0, semester:3, nonGraded:true },
+  { code: '26LCN1002T', title: 'Indian Traditional Knowledge',                 credits: 2, L:2, T:0, P:0, semester:3, nonGraded:true },
 
-  // Semester 4
-  { code: '26L10CS4701', title: 'Irrigation Eng & Hydrology', credits: 3, hours: '3-0-0', semester: 4 },
-  { code: '26L10CS4702', title: 'Structural Analysis II', credits: 4, hours: '3-1-0', semester: 4 },
-  { code: '26L10CS4701', title: 'Building Planning & CAD', credits: 3, hours: '3-0-0', semester: 4 },
-  { code: '26L10CS4701', title: 'AI & ML for Civil Engineers', credits: 3, hours: '3-0-2', semester: 4 },
-  { code: '26L10EN4001', title: 'Environmental Science', credits: 3, hours: '3-0-0', semester: 4 },
-  { code: '26L10EN4001', title: 'Professional Ethics and Values', credits: 2, hours: '0-2-0', semester: 4 },
-  { code: '26L10EN1011', title: 'Behavioural Psychology', credits: 1, hours: '0-1-0', semester: 4 },
+  // ── Semester 4 ──────────────────────────────────────────────────────────
+  { code: '26MAB2006J', title: 'Statistical Methods',                          credits: 4, L:3, T:0, P:2, semester:4,
+    prerequisiteCodes: ['26MAB2004T'] },
+  { code: '26CSC2004J', title: 'Design and Analysis of Algorithms',            credits: 4, L:3, T:0, P:2, semester:4,
+    prerequisiteCodes: ['26CSC2002J'] },
+  { code: '26CSC2011J', title: 'Operating Systems',                            credits: 4, L:3, T:0, P:2, semester:4 },
+  { code: '26CSC2008T', title: 'Computer Organization and Architecture',       credits: 3, L:3, T:0, P:0, semester:4 },
+  { code: '26CSC2014J', title: 'Machine Learning',                             credits: 4, L:3, T:0, P:2, semester:4,
+    prerequisiteCodes: ['26CSE1001T', '26MAB2004T'] },
+  { code: 'MDC-1',      title: 'Multidisciplinary Skill Course - 1',           credits: 3, L:0, T:0, P:0, semester:4 },
+  { code: 'SEC-2',      title: 'Skill Enhancement Course - 2',                credits: 2, L:0, T:0, P:0, semester:4 },
+  { code: '26LCN1003T', title: 'Professional Ethics and Values',               credits: 2, L:2, T:0, P:0, semester:4, nonGraded:true },
+  { code: '26GNN1003J', title: 'Behavioural Psychology',                       credits: 2, L:1, T:0, P:2, semester:4, nonGraded:true },
 
-  // Semester 5
-  { code: '26L10CS5001', title: 'Computer Networks', credits: 3, hours: '3-0-2', semester: 5 },
-  { code: '26L10CS5012', title: 'Database Management Systems', credits: 3, hours: '3-0-2', semester: 5 },
-  { code: '26L10CS5003', title: 'Theory of Computation', credits: 3, hours: '3-0-0', semester: 5 },
-  { code: '26L10CS5002', title: 'Design Learning', credits: 1, hours: '0-1-0', semester: 5 },
-  { code: '26L10CS5002', title: 'Multidisciplinary Skill Course - 2', credits: 3, hours: '2-1-0', semester: 5 },
-  { code: '26L10EN1011', title: 'Skill Enhancement Course - 3', credits: 3, hours: '2-1-0', semester: 5 },
-  { code: '26L10EN1011', title: 'Environmental Science with AI', credits: 2, hours: '2-0-0', semester: 5 },
-  { code: '26L10EN1011', title: 'Community Connect', credits: 0, hours: '0-0-2', semester: 5 },
+  // ── Semester 5 ──────────────────────────────────────────────────────────
+  { code: '26CSC2007J', title: 'Computer Networks',                            credits: 4, L:3, T:0, P:2, semester:5 },
+  { code: '26CSC3001J', title: 'Database Management Systems',                  credits: 4, L:3, T:0, P:2, semester:5 },
+  { code: '26CSC3039T', title: 'Theory of Computation',                        credits: 3, L:3, T:0, P:0, semester:5 },
+  { code: '26CSC3026J', title: 'Deep Learning',                                credits: 4, L:3, T:0, P:2, semester:5,
+    prerequisiteCodes: ['26CSC2014J'] },
+  { code: 'DEC-1',      title: 'Discipline Elective Course - 1',              credits: 4, L:0, T:0, P:0, semester:5 },
+  { code: 'MDC-2',      title: 'Multidisciplinary Skill Course - 2',           credits: 3, L:0, T:0, P:0, semester:5 },
+  { code: 'SEC-3',      title: 'Skill Enhancement Course - 3',                credits: 2, L:0, T:0, P:0, semester:5 },
+  { code: '26CYN1001J', title: 'Environmental Science with AI',                credits: 2, L:1, T:0, P:2, semester:5, nonGraded:true },
+  { code: '26CYN1002L', title: 'Community Connect',                            credits: 2, L:0, T:0, P:4, semester:5, nonGraded:true },
 
-  // Semester 6
-  { code: '26L10CS6171', title: 'Natural Language Processing', credits: 3, hours: '3-0-0', semester: 6 },
-  { code: '26L10CS6201', title: 'Computer Design', credits: 4, hours: '3-0-2', semester: 6 },
-  { code: '26L10EN6011', title: 'Discipline Elective Course -2', credits: 4, hours: '4-0-0', semester: 6 },
-  { code: '26L10EN6011', title: 'Discipline Elective Course -3', credits: 4, hours: '4-0-0', semester: 6 },
-  { code: '26L10EN6011', title: 'Skill Enhancement Course - 4', credits: 3, hours: '2-1-0', semester: 6 },
-  { code: '26L10EN1011', title: 'Disaster Mitigation and Management', credits: 2, hours: '2-0-0', semester: 6 },
+  // ── Semester 6 ──────────────────────────────────────────────────────────
+  { code: '26CSC3037J', title: 'Natural Language Processing',                  credits: 4, L:3, T:0, P:2, semester:6,
+    prerequisiteCodes: ['26CSC3026J'] },
+  { code: '26CSC3003J', title: 'Compiler Design',                              credits: 4, L:3, T:0, P:2, semester:6,
+    prerequisiteCodes: ['26CSC3039T'] },
+  { code: 'DEC-2',      title: 'Discipline Elective Course - 2',              credits: 4, L:0, T:0, P:0, semester:6 },
+  { code: 'DEC-3',      title: 'Discipline Elective Course - 3',              credits: 4, L:0, T:0, P:0, semester:6 },
+  { code: 'MDC-3',      title: 'Multidisciplinary Skill Course - 3',           credits: 3, L:0, T:0, P:0, semester:6 },
+  { code: 'SEC-4',      title: 'Skill Enhancement Course - 4',                credits: 2, L:0, T:0, P:0, semester:6 },
+  { code: '26CSN1001J', title: 'Cyber Hygiene',                               credits: 2, L:1, T:0, P:2, semester:6, nonGraded:true },
+  { code: '26CEN1001T', title: 'Disaster Mitigation and Management',           credits: 2, L:2, T:0, P:0, semester:6, nonGraded:true },
 
-  // Semester 7
-  { code: '26L10CS7011', title: 'Intelligent Transportation Systems', credits: 3, hours: '3-0-2', semester: 7 },
-  { code: '26L10CS7012', title: 'Estimation & Quantity Surveying', credits: 3, hours: '3-0-2', semester: 7 },
-  { code: '26L10CS7011', title: 'Open Elective V', credits: 3, hours: '3-0-0', semester: 7 },
-  { code: '26L10CS7101', title: 'Project Work (Phase I)', credits: 3, hours: '0-0-6', semester: 7 },
+  // ── Semester 7 ──────────────────────────────────────────────────────────
+  { code: 'DEC-4',      title: 'Discipline Elective Course - 4',              credits: 4, L:0, T:0, P:0, semester:7 },
+  { code: 'DEC-5',      title: 'Discipline Elective Course - 5',              credits: 4, L:0, T:0, P:0, semester:7 },
+  { code: 'DEC-6',      title: 'Discipline Elective Course - 6',              credits: 4, L:0, T:0, P:0, semester:7 },
+  { code: '26CSP3001L', title: 'Summer Internship',                           credits: 4, L:0, T:0, P:8, semester:7 },
 
-  // Semester 8
-  { code: '26L10DM2', title: 'Major Project', credits: 12, hours: '0-0-24', semester: 8 },
-  { code: '26L10DM3', title: 'Professional Internship', credits: 3, hours: '0-0-6', semester: 8 }
+  // ── Semester 8 ──────────────────────────────────────────────────────────
+  { code: '26CSP4001L', title: 'Major Project',                               credits: 12, L:0, T:0, P:24, semester:8 },
+  { code: '26CSP4002L', title: 'Major Project (Alt)',                          credits: 8, L:0, T:0, P:16, semester:8 },
+  { code: '26CSP4003L', title: 'Professional Internship',                     credits: 8, L:0, T:0, P:8, semester:8 },
 ]
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function courseKey(c: Course) {
+  return c.code + '|' + c.title
+}
+
+/** Get Course objects that are prerequisites of the given course */
+function getPrerequisites(course: Course): Course[] {
+  if (!course.prerequisiteCodes?.length) return []
+  return allCourses.filter(c => course.prerequisiteCodes!.includes(c.code))
+}
+
+/** Get Course objects that depend on the given course */
+function getDependents(course: Course): Course[] {
+  return allCourses.filter(c => c.prerequisiteCodes?.includes(course.code))
+}
+
+function isPrerequisite(c: Course): boolean {
+  const active = activeCourse.value
+  if (!active) return false
+  return getPrerequisites(active).some(p => courseKey(p) === courseKey(c))
+}
+
+function isDependent(c: Course): boolean {
+  const active = activeCourse.value
+  if (!active) return false
+  return getDependents(active).some(d => courseKey(d) === courseKey(c))
+}
+
+function isLocked(c: Course): boolean {
+  return !!lockedCourse.value && courseKey(lockedCourse.value) === courseKey(c)
+}
+
+function isInPath(c: Course): boolean {
+  const active = activeCourse.value
+  if (!active) return false
+  return isLocked(c) || isPrerequisite(c) || isDependent(c)
+}
+
+/** The currently "active" course (hovered overrides locked for preview) */
+const activeCourse = computed(() => hoveredCourse.value || lockedCourse.value)
 
 const coursesBySemester = computed(() => {
-  const semesters: Course[][] = Array.from({ length: 8 }, () => [])
-  allCourses.forEach(course => {
-    semesters[course.semester - 1].push(course)
-  })
-  return semesters
+  const sems: Course[][] = Array.from({ length: 8 }, () => [])
+  allCourses.forEach(c => { if (c.semester >= 1 && c.semester <= 8) sems[c.semester - 1].push(c) })
+  return sems
 })
 
 function selectCourse(course: Course) {
-  lockedCourse.value = lockedCourse.value?.code === course.code ? null : course
-  if (lockedCourse.value) {
-    nextTick(() => redrawConnections())
+  if (lockedCourse.value && courseKey(lockedCourse.value) === courseKey(course)) {
+    clearSelection()
+  } else {
+    lockedCourse.value = course
+    hoveredCourse.value = null
+    nextTick(redrawConnections)
   }
 }
 
 function hoverCourse(course: Course) {
-  if (!lockedCourse.value) {
-    hoveredCourse.value = course
-    nextTick(() => redrawConnections())
-  }
+  if (lockedCourse.value) return // don't override locked
+  hoveredCourse.value = course
+  nextTick(redrawConnections)
 }
 
 function clearHover() {
   hoveredCourse.value = null
-  redrawConnections()
+  nextTick(redrawConnections)
 }
 
 function clearSelection() {
   lockedCourse.value = null
-  redrawConnections()
-}
-
-function getPrerequisites(code: string): string[] {
-  const course = allCourses.find(c => c.code === code)
-  return course?.prerequisites || []
-}
-
-function getDependents(code: string): string[] {
-  const course = allCourses.find(c => c.code === code)
-  return course?.dependents || []
-}
-
-function hasPrerequisites(code: string): boolean {
-  return getPrerequisites(code).length > 0
-}
-
-function hasDependents(code: string): boolean {
-  return getDependents(code).length > 0
-}
-
-function isPrerequisite(code: string): boolean {
-  const current = lockedCourse.value || hoveredCourse.value
-  if (!current) return false
-  return getPrerequisites(current.code).includes(code)
-}
-
-function isDependent(code: string): boolean {
-  const current = lockedCourse.value || hoveredCourse.value
-  if (!current) return false
-  return getDependents(current.code).includes(code)
-}
-
-function isInPath(code: string): boolean {
-  const current = lockedCourse.value || hoveredCourse.value
-  if (!current) return false
-  return isPrerequisite(code) || isDependent(code) || current.code === code
+  hoveredCourse.value = null
+  nextTick(redrawConnections)
 }
 
 function getTotalCredits(semester: Course[]): number {
-  return semester.reduce((total, course) => total + course.credits, 0)
+  return semester.reduce((s, c) => s + c.credits, 0)
 }
 
-function getCourseType(code: string): string {
-  if (code.endsWith('L')) return 'L'
-  if (code.endsWith('T')) return 'T'
-  if (code.endsWith('J')) return 'J'
+function getCourseType(course: Course): string {
+  if (course.code.endsWith('J')) return 'J'
+  if (course.code.endsWith('L')) return 'L'
+  if (course.code.endsWith('T')) return 'T'
+  // Generic elective codes
+  if (course.code.startsWith('DEC') || course.code.startsWith('SEC') || course.code.startsWith('MDC')) return 'T'
   return 'T'
 }
 
 function filterCourses(semester: Course[]): Course[] {
   if (!courseTypeFilter.value) return semester
-  return semester.filter(course => getCourseType(course.code) === courseTypeFilter.value)
+  return semester.filter(c => getCourseType(c) === courseTypeFilter.value)
 }
 
+// ── SVG connection drawing ─────────────────────────────────────────────────
 function redrawConnections() {
-  if (!pathwaySvg.value || !semestersContainer.value) return
-
   const svg = pathwaySvg.value
+  const container = semestersContainer.value
+  if (!svg || !container) return
+
+  // Size the SVG to match the scroll container
+  const containerRect = container.getBoundingClientRect()
+  svg.setAttribute('viewBox', `0 0 ${container.scrollWidth} ${container.scrollHeight}`)
+  svg.style.width = container.scrollWidth + 'px'
+  svg.style.height = container.scrollHeight + 'px'
   svg.innerHTML = ''
 
-  const current = lockedCourse.value || hoveredCourse.value
-  if (!current) return
+  const active = activeCourse.value
+  if (!active) return
 
-  const prerequisites = getPrerequisites(current.code)
-  const dependents = getDependents(current.code)
-
-  const courseCards = semestersContainer.value.querySelectorAll('.course-card')
-  const positions = new Map<string, { x: number; y: number }>()
-
-  courseCards.forEach((card: Element) => {
-    const codeEl = card.querySelector('.course-code')
-    if (codeEl?.textContent) {
-      const rect = card.getBoundingClientRect()
-      const svgRect = svg.getBoundingClientRect()
-      positions.set(codeEl.textContent.trim(), {
-        x: rect.left - svgRect.left + rect.width / 2,
-        y: rect.top - svgRect.top + rect.height / 2
-      })
-    }
+  // Build a map: courseKey → card element
+  const cards = container.querySelectorAll<HTMLElement>('.course-card')
+  const posMap = new Map<string, DOMRect>()
+  cards.forEach(card => {
+    const key = card.dataset.key
+    if (key) posMap.set(key, card.getBoundingClientRect())
   })
 
-  const currentPos = positions.get(current.code)
-  if (!currentPos) return
+  const activeKey = active.code + '_' + active.title.slice(0, 10)
+  const activeRect = posMap.get(activeKey)
+  if (!activeRect) return
 
-  // Draw prerequisite connections (red)
-  prerequisites.forEach(prereq => {
-    const prereqPos = positions.get(prereq)
-    if (prereqPos) {
-      drawConnection(svg, prereqPos, currentPos, '#dc2626')
+  const scrollLeft = container.scrollLeft
+  const scrollTop = container.scrollTop
+
+  function rectCenter(r: DOMRect) {
+    return {
+      x: r.left - containerRect.left + scrollLeft + r.width / 2,
+      y: r.top - containerRect.top + scrollTop + r.height / 2,
     }
+  }
+
+  const activePos = rectCenter(activeRect)
+
+  const drawLine = (from: {x:number,y:number}, to: {x:number,y:number}, color: string, dashed = false) => {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    const mx = (from.x + to.x) / 2
+    const d = `M ${from.x} ${from.y} C ${mx} ${from.y}, ${mx} ${to.y}, ${to.x} ${to.y}`
+    path.setAttribute('d', d)
+    path.setAttribute('stroke', color)
+    path.setAttribute('stroke-width', '2.5')
+    path.setAttribute('fill', 'none')
+    path.setAttribute('stroke-linecap', 'round')
+    if (dashed) path.setAttribute('stroke-dasharray', '6,4')
+    // Arrow marker
+    const markerId = 'arrow-' + color.replace('#', '')
+    if (!svg!.querySelector(`#${markerId}`)) {
+      const defs = svg!.querySelector('defs') || (() => {
+        const d2 = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+        svg!.prepend(d2)
+        return d2
+      })()
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker')
+      marker.setAttribute('id', markerId)
+      marker.setAttribute('markerWidth', '8')
+      marker.setAttribute('markerHeight', '8')
+      marker.setAttribute('refX', '6')
+      marker.setAttribute('refY', '3')
+      marker.setAttribute('orient', 'auto')
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
+      poly.setAttribute('points', '0 0, 8 3, 0 6')
+      poly.setAttribute('fill', color)
+      marker.appendChild(poly)
+      defs.appendChild(marker)
+    }
+    path.setAttribute('marker-end', `url(#${markerId})`)
+    svg!.appendChild(path)
+  }
+
+  getPrerequisites(active).forEach(pre => {
+    const key = pre.code + '_' + pre.title.slice(0, 10)
+    const r = posMap.get(key)
+    if (r) drawLine(rectCenter(r), activePos, '#dc2626')
   })
 
-  // Draw dependent connections (green)
-  dependents.forEach(dependent => {
-    const depPos = positions.get(dependent)
-    if (depPos) {
-      drawConnection(svg, currentPos, depPos, '#16a34a')
-    }
+  getDependents(active).forEach(dep => {
+    const key = dep.code + '_' + dep.title.slice(0, 10)
+    const r = posMap.get(key)
+    if (r) drawLine(activePos, rectCenter(r), '#16a34a')
   })
 }
 
-function drawConnection(svg: SVGElement, from: { x: number; y: number }, to: { x: number; y: number }, color: string) {
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const controlX = from.x + dx / 2
-  const controlY = from.y + dy / 2 + (Math.abs(dx) > 100 ? 40 : 0)
-
-  const d = `M ${from.x} ${from.y} Q ${controlX} ${controlY} ${to.x} ${to.y}`
-  
-  path.setAttribute('d', d)
-  path.setAttribute('stroke', color)
-  path.setAttribute('stroke-width', '2.5')
-  path.setAttribute('fill', 'none')
-  path.setAttribute('stroke-linecap', 'round')
-  
-  svg.appendChild(path)
-}
+watch(activeTab, () => {
+  nextTick(redrawConnections)
+})
 
 onMounted(() => {
-  nextTick(() => {
-    redrawConnections()
-  })
+  nextTick(redrawConnections)
+  // Redraw on scroll too
+  semestersContainer.value?.addEventListener('scroll', redrawConnections)
+  window.addEventListener('resize', redrawConnections)
 })
 </script>
 
 <style scoped>
-main {
-  flex: 1;
+:root {
+  --primary: #1a5f47;
+  --accent: #00d4aa;
+  --surface: #ffffff;
+  --surface-alt: #f8fafb;
+  --border: #e2e8f0;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --background: #f1f5f9;
 }
+
+main { flex: 1; }
 
 .curriculum-section {
   padding: 40px 20px;
-  background: var(--background);
+  background: var(--background, #f1f5f9);
   min-height: 100vh;
 }
 
-.container {
-  max-width: 1800px;
-  margin: 0 auto;
-}
+.container { max-width: 1900px; margin: 0 auto; }
 
-.curriculum-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
+.curriculum-header { text-align: center; margin-bottom: 32px; }
 .page-title {
-  font-size: 36px;
-  font-weight: 800;
-  color: var(--primary);
-  margin: 0 0 8px 0;
+  font-size: 32px; font-weight: 800; color: var(--primary, #1a5f47);
+  margin: 0 0 6px;
 }
+.page-subtitle { font-size: 13px; color: var(--text-secondary, #64748b); margin: 0; letter-spacing: .4px; }
 
-.page-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0;
-  letter-spacing: 0.5px;
-}
-
+/* Tabs */
 .tabs-container {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 32px;
-  border-bottom: 2px solid var(--border);
-  padding-bottom: 0;
+  display: flex; gap: 6px; margin-bottom: 28px;
+  border-bottom: 2px solid var(--border, #e2e8f0);
 }
-
 .tab-btn {
-  padding: 12px 24px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 3px solid transparent;
-  transition: all 0.3s ease;
-  font-size: 14px;
+  padding: 10px 22px; background: transparent; border: none;
+  color: var(--text-secondary, #64748b); font-weight: 600; cursor: pointer;
+  border-bottom: 3px solid transparent; transition: all .25s; font-size: 14px;
+  margin-bottom: -2px;
 }
-
-.tab-btn:hover {
-  color: var(--primary);
-}
-
-.tab-btn.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-}
+.tab-btn:hover { color: var(--primary, #1a5f47); }
+.tab-btn.active { color: var(--primary, #1a5f47); border-bottom-color: var(--primary, #1a5f47); }
 
 .tab-content {
-  background: var(--surface);
-  border-radius: 12px;
-  padding: 24px;
+  background: var(--surface, #fff);
+  border-radius: 12px; padding: 24px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.06);
 }
 
-/* Pathway View */
-.pathway-view {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.pathway-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-
-.pathway-info h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0 0 8px 0;
-}
-
-.info-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.pathway-legend {
-  display: flex;
-  gap: 24px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.legend-dot {
-  font-size: 14px;
-}
-
-.legend-dot.pre {
-  color: #dc2626;
-}
-
-.legend-dot.dep {
-  color: #16a34a;
-}
-
-.legend-dot.locked {
-  color: var(--primary);
-}
+/* ── Pathway ── */
+.pathway-view { display: flex; flex-direction: column; gap: 16px; }
+.pathway-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.pathway-info h2 { font-size: 20px; font-weight: 700; color: var(--primary,#1a5f47); margin: 0 0 4px; }
+.info-text { font-size: 12px; color: var(--text-secondary,#64748b); margin: 0; }
+.pathway-legend { display: flex; gap: 20px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary,#64748b); }
+.legend-dot.pre  { color: #dc2626; }
+.legend-dot.dep  { color: #16a34a; }
+.legend-dot.locked { color: var(--primary,#1a5f47); }
 
 .pathway-container {
   position: relative;
-  overflow-x: auto;
-  min-height: 500px;
+  overflow: auto;
+  min-height: 480px;
+  border: 1px solid var(--border,#e2e8f0);
+  border-radius: 10px;
 }
-
 .pathway-svg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 10;
+  position: absolute; top: 0; left: 0;
+  pointer-events: none; z-index: 10;
 }
-
 .semesters-container {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding-bottom: 12px;
-  position: relative;
-  z-index: 20;
+  display: flex; gap: 14px;
+  padding: 16px;
+  position: relative; z-index: 20;
+  min-width: max-content;
 }
 
-.semester-column {
-  flex: 0 0 140px;
-  min-width: 140px;
-}
-
+.semester-column { flex: 0 0 148px; min-width: 148px; }
 .semester-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--primary);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 2px solid var(--primary,#1a5f47);
 }
-
-.semester-header h3 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
-}
-
+.semester-header h3 { font-size: 12px; font-weight: 700; color: var(--primary,#1a5f47); margin: 0; }
 .credits-badge {
-  font-size: 11px;
-  background: var(--surface-alt);
-  color: var(--text-secondary);
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: 10px; background: #e8f5f0; color: var(--primary,#1a5f47);
+  padding: 2px 6px; border-radius: 4px; font-weight: 600;
 }
-
-.courses-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.courses-list { display: flex; flex-direction: column; gap: 7px; }
 
 .course-card {
-  background: var(--surface-alt);
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  min-height: 90px;
-  display: flex;
-  flex-direction: column;
+  border: 2px solid var(--border,#e2e8f0);
+  border-radius: 8px; padding: 9px;
+  cursor: pointer; transition: all .2s ease;
+  min-height: 88px; display: flex; flex-direction: column;
   justify-content: space-between;
+  background: var(--surface-alt,#f8fafb);
+  position: relative;
 }
-
 .course-card:hover:not(.faded) {
-  border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(0, 212, 170, 0.15);
+  border-color: #94a3b8;
+  box-shadow: 0 3px 10px rgba(0,0,0,.1);
 }
-
-.course-card.faded {
-  opacity: 0.1;
-  pointer-events: none;
+.course-card.faded { opacity: .08; pointer-events: none; }
+.course-card.highlighted-pre {
+  border-color: #dc2626;
+  background: #fff5f5;
+  box-shadow: 0 3px 12px rgba(220,38,38,.18);
 }
-
-.course-card.highlighted {
-  border-color: var(--primary);
-  box-shadow: 0 4px 12px rgba(26, 95, 71, 0.2);
-  background: rgba(26, 95, 71, 0.05);
+.course-card.highlighted-dep {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  box-shadow: 0 3px 12px rgba(22,163,74,.18);
 }
-
 .course-card.locked {
-  border: 2px solid var(--primary);
-  background: rgba(26, 95, 71, 0.1);
-  box-shadow: 0 6px 16px rgba(26, 95, 71, 0.25);
+  border-color: var(--primary,#1a5f47);
+  background: #ecfdf8;
+  box-shadow: 0 4px 16px rgba(26,95,71,.22);
 }
+.course-card.non-graded { opacity: .75; font-style: italic; }
 
-.course-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 4px;
-  margin-bottom: 4px;
+/* type color strip on left border */
+.course-card.type-t { border-left: 4px solid #3b82f6; }
+.course-card.type-l { border-left: 4px solid #ef4444; }
+.course-card.type-j { border-left: 4px solid #8b5cf6; }
+
+.course-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; margin-bottom: 4px; }
+.course-code { font-size: 9px; font-weight: 700; color: var(--primary,#1a5f47); flex: 1; line-height: 1.2; }
+.course-type-badge {
+  font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 3px; white-space: nowrap;
 }
+.type-t .course-type-badge { background: #dbeafe; color: #1e40af; }
+.type-l .course-type-badge { background: #fee2e2; color: #991b1b; }
+.type-j .course-type-badge { background: #ede9fe; color: #5b21b6; }
 
-.course-code {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
-  flex: 1;
-}
+.course-title { font-size: 10px; color: var(--text-primary,#1e293b); margin: 0 0 4px; line-height: 1.3; flex: 1; }
+.course-footer { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-secondary,#64748b); }
+.credits { font-weight: 700; }
 
-.course-type {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 4px;
-  border-radius: 3px;
-  white-space: nowrap;
-  text-transform: uppercase;
-}
-
-.course-type[data-type="T"] {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.course-type[data-type="L"] {
-  background: #fecaca;
-  color: #991b1b;
-}
-
-.course-type[data-type="J"] {
-  background: #d1d5db;
-  color: #374151;
-}
-
-.course-title {
-  font-size: 11px;
-  color: var(--text-primary);
-  margin: 0 0 4px 0;
-  line-height: 1.3;
-  flex: 1;
-}
-
-.course-footer {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-secondary);
-}
-
-.credits {
-  font-weight: 600;
-}
-
-.hours {
-  font-size: 9px;
-}
-
-/* Dependencies Panel */
+/* Dependencies panel */
 .dependencies-panel {
-  position: fixed;
-  right: 20px;
-  top: 100px;
-  width: 300px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface,#fff);
+  border: 1px solid var(--border,#e2e8f0);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 100;
-  max-height: 500px;
-  overflow-y: auto;
+  box-shadow: 0 6px 24px rgba(0,0,0,.1);
+  overflow: hidden;
+  margin-top: 8px;
 }
-
 .panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  background: var(--surface);
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 14px 16px; border-bottom: 1px solid var(--border,#e2e8f0);
+  background: #f8fafb;
 }
-
-.panel-header h3 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
-  flex: 1;
-}
-
+.panel-code { font-size: 11px; font-weight: 700; color: var(--primary,#1a5f47); margin-bottom: 2px; }
+.panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary,#1e293b); }
 .close-btn {
-  background: none;
-  border: none;
-  font-size: 18px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: none; border: none; font-size: 16px;
+  color: var(--text-secondary,#64748b); cursor: pointer; padding: 0;
+  width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; transition: all .15s;
 }
-
-.close-btn:hover {
-  color: var(--primary);
-}
-
-.panel-content {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
+.close-btn:hover { background: #f1f5f9; color: var(--primary,#1a5f47); }
+.panel-content { padding: 14px 16px; display: flex; gap: 24px; }
+.dependencies-section { flex: 1; }
 .dependencies-section h4 {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0 0 8px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--text-secondary,#64748b); margin: 0 0 8px;
 }
-
-.dependencies-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+.dependencies-list { display: flex; flex-direction: column; gap: 6px; }
 .dependency-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  padding: 6px 8px;
-  background: var(--surface-alt);
-  border-radius: 6px;
+  display: flex; align-items: flex-start; gap: 7px;
+  font-size: 11px; padding: 5px 8px;
+  background: var(--surface-alt,#f8fafb); border-radius: 6px;
 }
-
 .dep-badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 4px;
-  border-radius: 3px;
-  white-space: nowrap;
+  font-size: 8px; font-weight: 700; padding: 2px 4px; border-radius: 3px; white-space: nowrap; margin-top: 1px;
 }
+.dep-badge.pre { background: #fee2e2; color: #991b1b; }
+.dep-badge.dep { background: #dcfce7; color: #166534; }
+.no-deps { font-size: 11px; color: var(--text-secondary,#64748b); margin: 0; font-style: italic; }
 
-.dep-badge.pre {
-  background: #fee2e2;
-  color: #991b1b;
-}
+/* Slide transition */
+.slide-panel-enter-active, .slide-panel-leave-active { transition: all .25s ease; }
+.slide-panel-enter-from, .slide-panel-leave-to { opacity: 0; transform: translateY(-8px); }
 
-.dep-badge.dep {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.no-deps {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 0;
-  font-style: italic;
-}
-
-/* Career View */
-.career-view {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.career-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.career-header h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
-}
-
-.filters {
-  display: flex;
-  gap: 12px;
-}
-
+/* ── Career ── */
+.career-view { display: flex; flex-direction: column; gap: 20px; }
+.career-header { display: flex; justify-content: space-between; align-items: center; }
+.career-header h2 { font-size: 20px; font-weight: 700; color: var(--primary,#1a5f47); margin: 0; }
+.filters { display: flex; gap: 10px; }
 .filter-select {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text-primary);
-  font-size: 13px;
-  cursor: pointer;
+  padding: 7px 12px; border: 1px solid var(--border,#e2e8f0); border-radius: 6px;
+  background: var(--surface,#fff); color: var(--text-primary,#1e293b); font-size: 13px; cursor: pointer;
 }
-
-.filter-select:focus {
-  outline: none;
-  border-color: var(--primary);
-}
-
-.career-matrix {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding-bottom: 12px;
-}
-
-.career-column {
-  flex: 0 0 150px;
-  min-width: 150px;
-}
-
-.column-header {
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--primary);
-}
-
-.column-header h3 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
-}
-
-.career-courses {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+.filter-select:focus { outline: none; border-color: var(--primary,#1a5f47); }
+.career-matrix { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; }
+.career-column { flex: 0 0 160px; min-width: 160px; }
+.column-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--primary,#1a5f47); }
+.column-header h3 { font-size: 12px; font-weight: 700; color: var(--primary,#1a5f47); margin: 0 0 2px; }
+.career-courses { display: flex; flex-direction: column; gap: 7px; }
 .career-course {
-  background: var(--surface-alt);
-  border-left: 3px solid var(--text-secondary);
-  border-radius: 6px;
-  padding: 8px;
-  font-size: 11px;
+  border-radius: 6px; padding: 8px;
+  font-size: 10px; border-left: 3px solid transparent;
 }
-
-.career-course[data-type="T"] {
-  border-left-color: #1e40af;
-  background: #dbeafe;
-}
-
-.career-course[data-type="L"] {
-  border-left-color: #991b1b;
-  background: #fecaca;
-}
-
-.career-course[data-type="J"] {
-  border-left-color: #374151;
-  background: #d1d5db;
-}
-
-.career-course-code {
-  font-weight: 700;
-  color: var(--primary);
-  margin-bottom: 2px;
-}
-
-.career-course-title {
-  color: var(--text-primary);
-  line-height: 1.3;
-  margin-bottom: 4px;
-  font-size: 10px;
-}
-
-.career-course-type {
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-@media (max-width: 1024px) {
-  .dependencies-panel {
-    position: relative;
-    width: 100%;
-    max-height: none;
-    margin-top: 20px;
-  }
-
-  .pathway-legend {
-    flex-direction: column;
-    gap: 12px;
-  }
-}
+.career-course[data-type="T"] { background: #dbeafe; border-left-color: #1e40af; }
+.career-course[data-type="L"] { background: #fee2e2; border-left-color: #991b1b; }
+.career-course[data-type="J"] { background: #ede9fe; border-left-color: #5b21b6; }
+.career-course-code { font-weight: 700; color: var(--primary,#1a5f47); margin-bottom: 2px; font-size: 9px; }
+.career-course-title { color: var(--text-primary,#1e293b); line-height: 1.3; margin-bottom: 4px; }
+.career-course-meta { display: flex; justify-content: space-between; align-items: center; }
+.career-type-badge { font-size: 8px; font-weight: 700; text-transform: uppercase; color: var(--text-secondary,#64748b); }
+.career-credits { font-size: 9px; font-weight: 700; color: var(--primary,#1a5f47); }
 
 @media (max-width: 768px) {
-  .curriculum-section {
-    padding: 24px 12px;
-  }
-
-  .semester-column {
-    flex: 0 0 120px;
-    min-width: 120px;
-  }
-
-  .course-card {
-    min-height: 80px;
-  }
-
-  .page-title {
-    font-size: 24px;
-  }
-
-  .pathway-header {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .pathway-legend {
-    width: 100%;
-  }
+  .curriculum-section { padding: 20px 12px; }
+  .pathway-header { flex-direction: column; gap: 12px; }
+  .pathway-legend { flex-wrap: wrap; gap: 10px; }
+  .panel-content { flex-direction: column; gap: 12px; }
+  .page-title { font-size: 22px; }
 }
 </style>
